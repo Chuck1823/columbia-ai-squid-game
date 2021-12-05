@@ -15,6 +15,10 @@ class PlayerAI(BaseAI):
         super().__init__()
         self.pos = None
         self.player_num = None
+        self.move_time = 5
+        self.time_for_move = 2.5
+        self.time_for_trap = 2.5
+        self.max_depth = 5
     
     def getPosition(self):
         return self.pos
@@ -42,7 +46,62 @@ class PlayerAI(BaseAI):
         You may adjust the input variables as you wish (though it is not necessary). Output has to be (x,y) coordinates.
         
         """
+        time_for_move = time.time() + self.time_for_move
+        while time.time() < time_for_move:
+            curr_pos = grid.find(self.player_num)
+            grid_copy = grid.clone()
+            depth = 0
+            new_pos = self.get_move_max(grid_copy, curr_pos, depth)
+
+            # # find all available moves
+            # available_moves = grid.get_neighbors(self.pos, only_available=True)
+            #
+            # # make random move
+            # new_pos = random.choice(available_moves) if available_moves else None
+
+        return new_pos
+
+
+    def get_move_max(self, grid_copy, curr_pos, depth):
+        if depth >= self.max_depth:
+            return (curr_pos, self.move_utility(grid_copy))
+
+        max_util = (None, -np.inf)
+
+        for child in grid_copy.get_neighbors(curr_pos, only_available=True):
+            depth += 1
+            grid_copy.move(self.player_num, child)
+            curr_pos = child
+            result = self.get_move_min(grid_copy, curr_pos, depth)
+
+            if result[1] > max_util[1]:
+                max_util = result
+
+
+        return max_util
+
+    def get_move_min(self, grid_copy, curr_pos, depth):
+        if depth >= self.max_depth:
+            return (None, self.move_utility(grid_copy))
+
+        min_util = (None, np.inf)
+
+        for child in grid_copy.get_neighbors(grid_copy.find(3 - self.player_num,), only_available=True):
+            depth += 1
+            grid_copy.trap(child)
+            result = self.get_move_max(grid_copy, curr_pos, depth)
+
+            if result[1] < min_util[1]:
+                min_util = result
+
+        return min_util
+
+    def move_h_is(self, grid_copy, new_pos):
+        return len(grid_copy.get_neighbors(new_pos, only_available=True))
+
+    def move_utility(self, grid):
         pass
+
 
     def getTrap(self, grid : Grid) -> tuple:
         """ 

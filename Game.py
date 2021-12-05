@@ -1,13 +1,11 @@
-import numpy as np
 from Grid import Grid
 from ComputerAI import ComputerAI
 from Displayer import Displayer
-from PlayerAI import PlayerAI
 from test_players.EasyAI import EasyAI
 from Utils import *
 import time
 
-from test_players.MediumAI import MediumAI
+# from test_players.MediumAI import MediumAI
 
 PLAYER_TURN, COMPUTER_TURN = 1,2
 
