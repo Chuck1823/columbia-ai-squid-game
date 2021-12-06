@@ -51,7 +51,7 @@ class PlayerAI(BaseAI):
             curr_pos = grid.find(self.player_num)
             grid_copy = grid.clone()
             depth = 0
-            new_pos = self.get_move_max(grid_copy, curr_pos, depth)
+            move = self.get_move_max(grid_copy, curr_pos, depth)
 
             # # find all available moves
             # available_moves = grid.get_neighbors(self.pos, only_available=True)
@@ -59,19 +59,22 @@ class PlayerAI(BaseAI):
             # # make random move
             # new_pos = random.choice(available_moves) if available_moves else None
 
-        return new_pos
+        return move
 
 
     def get_move_max(self, grid_copy, curr_pos, depth):
         if depth >= self.max_depth:
-            return (curr_pos, self.move_utility(grid_copy))
+            return (curr_pos, self.move_utility(grid_copy, curr_pos))
 
         max_util = (None, -np.inf)
 
-        for child in grid_copy.get_neighbors(curr_pos, only_available=True):
+        avail_moves = grid_copy.get_neighbors(curr_pos, only_available=True)
+        avail_moves.sort(avail_moves, key=self.move_h_ocls(grid_copy, avail_moves))
+
+        for move in avail_moves:
             depth += 1
-            grid_copy.move(self.player_num, child)
-            curr_pos = child
+            grid_copy.move(self.player_num, move)
+            curr_pos = move
             result = self.get_move_min(grid_copy, curr_pos, depth)
 
             if result[1] > max_util[1]:
@@ -82,13 +85,13 @@ class PlayerAI(BaseAI):
 
     def get_move_min(self, grid_copy, curr_pos, depth):
         if depth >= self.max_depth:
-            return (None, self.move_utility(grid_copy))
+            return (curr_pos, self.move_utility(grid_copy, curr_pos))
 
         min_util = (None, np.inf)
 
-        for child in grid_copy.get_neighbors(grid_copy.find(3 - self.player_num,), only_available=True):
+        for trap in grid_copy.get_neighbors(grid_copy.find(3 - self.player_num), only_available=True):
             depth += 1
-            grid_copy.trap(child)
+            grid_copy.trap(trap)
             result = self.get_move_max(grid_copy, curr_pos, depth)
 
             if result[1] < min_util[1]:
@@ -96,11 +99,14 @@ class PlayerAI(BaseAI):
 
         return min_util
 
-    def move_h_is(self, grid_copy, new_pos):
-        return len(grid_copy.get_neighbors(new_pos, only_available=True))
+    def move_h_ocls(self, grid_copy, avail_moves):
+        utility_l = []
+        for move in avail_moves:
+            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True)))
+        return utility_l
 
-    def move_utility(self, grid):
-        pass
+    def move_utility(self, grid_copy, curr_pos):
+        return len(grid_copy.get_neighbors(curr_pos, only_available=True))
 
 
     def getTrap(self, grid : Grid) -> tuple:
@@ -117,7 +123,18 @@ class PlayerAI(BaseAI):
         You may adjust the input variables as you wish (though it is not necessary). Output has to be (x,y) coordinates.
         
         """
-        pass
+        time_for_trap = time.time() + self.time_for_trap
+        while time.time() < time_for_trap:
+            # find opponent
+            opponent = grid.find(3 - self.player_num)
+
+            # find all available cells surrounding Opponent
+            available_cells = grid.get_neighbors(opponent, only_available=True)
+
+            # throw to one of the available cells randomly
+            trap = random.choice(available_cells)
+
+        return trap
         
 
     
