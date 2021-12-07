@@ -1,8 +1,10 @@
 import numpy as np
 import random
 import time
+import Utils as utils
 import sys
-import os 
+import os
+
 from BaseAI import BaseAI
 from Grid import Grid
 
@@ -19,7 +21,8 @@ class PlayerAI(BaseAI):
         self.time_for_move = 2.5
         self.time_for_trap = 2.5
         self.max_depth = 5
-    
+        self.lvl_weight = {0: 12, 1: 10, 2: 8, 3: 6, 4: 4, 5: 2}
+
     def getPosition(self):
         return self.pos
 
@@ -64,7 +67,7 @@ class PlayerAI(BaseAI):
 
     def get_move_max(self, grid_copy, curr_pos, depth):
         if depth >= self.max_depth:
-            return (curr_pos, self.move_utility(grid_copy, curr_pos))
+            return (None, self.move_utility(grid_copy, curr_pos))
 
         max_util = (None, -np.inf)
 
@@ -85,13 +88,14 @@ class PlayerAI(BaseAI):
 
     def get_move_min(self, grid_copy, curr_pos, depth):
         if depth >= self.max_depth:
-            return (curr_pos, self.move_utility(grid_copy, curr_pos))
+            return (None, self.move_utility(grid_copy, curr_pos))
 
         min_util = (None, np.inf)
 
-        for trap in grid_copy.get_neighbors(grid_copy.find(3 - self.player_num), only_available=True):
+        for trap in grid_copy.get_neighbors(curr_pos, only_available=True):
             depth += 1
-            grid_copy.trap(trap)
+            trap_land = utils.throw_trap(player=(3 - self.player_num), grid=grid_copy, intended_position=trap)
+            grid_copy.trap(trap_land)
             result = self.get_move_max(grid_copy, curr_pos, depth)
 
             if result[1] < min_util[1]:
@@ -106,7 +110,29 @@ class PlayerAI(BaseAI):
         return utility_l
 
     def move_utility(self, grid_copy, curr_pos):
-        return len(grid_copy.get_neighbors(curr_pos, only_available=True))
+        level = 0
+        num_of_traps = 0
+        utility = 0
+        # Continue expanding scope until we've reached limits of the board
+        while len(utils.get_neighbors_by_level(curr_pos, level)) > len(utils.get_neighbors_by_level(curr_pos, level+1)):
+            ns = utils.get_neighbors_by_level(curr_pos, level)
+            avail_cells = grid_copy.getAvailableCells()
+
+            # Count number of traps at the current level
+            for elem in ns:
+                if elem not in avail_cells:
+                    num_of_traps += 1
+
+            utility -= -(self.lvl_weight[level] * num_of_traps)
+            trapped = utils.check_if_trapped(ns, num_of_traps)
+
+            if trapped:
+                return -np.inf
+
+            level += 1
+            num_of_traps = 0
+
+        return
 
 
     def getTrap(self, grid : Grid) -> tuple:
@@ -135,6 +161,5 @@ class PlayerAI(BaseAI):
             trap = random.choice(available_cells)
 
         return trap
-        
 
     
