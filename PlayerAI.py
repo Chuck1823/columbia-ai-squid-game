@@ -2,8 +2,6 @@ import numpy as np
 import random
 import time
 import Utils as utils
-import sys
-import os
 
 from BaseAI import BaseAI
 from Grid import Grid
@@ -21,7 +19,8 @@ class PlayerAI(BaseAI):
         self.time_for_move = 2.5
         self.time_for_trap = 2.5
         self.max_depth = 5
-        self.lvl_weight = {0: 12, 1: 10, 2: 8, 3: 6, 4: 4, 5: 2}
+        self.lvl_weight = {0: 50, 1: 40, 2: 30, 3: 20, 4: 10, 5: 2}
+        self.man_dist_conversion = {0: 8, 1: 7, 2: 6, 3: 5, 4: 4, 5: 3}
 
     def getPosition(self):
         return self.pos
@@ -72,11 +71,14 @@ class PlayerAI(BaseAI):
         max_util = (None, -np.inf)
 
         avail_moves = grid_copy.get_neighbors(curr_pos, only_available=True)
-        avail_moves.sort(avail_moves, key=self.move_h_ocls(grid_copy, avail_moves))
+
+        # move_h_ocls(grid_copy, avail_moves), move_h_is(grid_copy, avail_moves), move_h_aisgrid_copy, avail_moves),
+        # move_h_manhattan_dist_to_middle(avail_moves) as available heuristics
+        avail_moves.sort()
 
         for move in avail_moves:
             depth += 1
-            grid_copy.move(self.player_num, move)
+            grid_copy.move(move, self.player_num)
             curr_pos = move
             result = self.get_move_min(grid_copy, curr_pos, depth)
 
@@ -94,7 +96,7 @@ class PlayerAI(BaseAI):
 
         for trap in grid_copy.get_neighbors(curr_pos, only_available=True):
             depth += 1
-            trap_land = utils.throw_trap(player=(3 - self.player_num), grid=grid_copy, intended_position=trap)
+            trap_land = utils.throw_trap(player=self, grid=grid_copy, intended_position=trap)
             grid_copy.trap(trap_land)
             result = self.get_move_max(grid_copy, curr_pos, depth)
 
@@ -107,13 +109,42 @@ class PlayerAI(BaseAI):
         utility_l = []
         for move in avail_moves:
             utility_l.append(len(grid_copy.get_neighbors(move, only_available=True)))
+
+        return utility_l
+
+    def move_h_is(self, grid_copy, avail_moves):
+        utility_l = []
+        for move in avail_moves:
+            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True) - len(grid_copy.get_neighbors(grid_copy.find((3 - self.player_num)), only_available=True))))
+
+        return utility_l
+
+    def move_h_ais(self, grid_copy, avail_moves):
+        utility_l = []
+        for move in avail_moves:
+            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True) - (2 * len(grid_copy.get_neighbors(grid_copy.find((3 - self.player_num)), only_available=True)))))
+
+        return utility_l
+
+    def move_h_manhattan_dist_to_middle(self, avail_moves):
+        utility_l = []
+        for move in avail_moves:
+            manhattan_dist = np.abs(move[0], -3) + np.abs(move[1], -3)
+            if manhattan_dist > 5:
+                utility_l.append(3)
+            else:
+                utility_l.append(self.man_dist_conversion[manhattan_dist])
+
         return utility_l
 
     def move_utility(self, grid_copy, curr_pos):
         level = 0
         num_of_traps = 0
         utility = 0
-        # Continue expanding scope until we've reached limits of the board
+        # Iteratively identifies the neighboring cells of a player that have traps, level by level with a continued
+        # expansion of the scope until we've reached limits of the board. Assigns each level some weight based on
+        # proximity of traps to the player. Meanwhile, it checks if the player is trapped which would cause imminent
+        # loss from the player
         while len(utils.get_neighbors_by_level(curr_pos, level)) > len(utils.get_neighbors_by_level(curr_pos, level+1)):
             ns = utils.get_neighbors_by_level(curr_pos, level)
             avail_cells = grid_copy.getAvailableCells()
@@ -132,7 +163,7 @@ class PlayerAI(BaseAI):
             level += 1
             num_of_traps = 0
 
-        return
+        return utility
 
 
     def getTrap(self, grid : Grid) -> tuple:
