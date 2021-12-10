@@ -21,6 +21,7 @@ class PlayerAI(BaseAI):
         self.max_depth = 5
         self.lvl_weight = {0: 50, 1: 40, 2: 30, 3: 20, 4: 10, 5: 2}
         self.man_dist_conversion = {0: 8, 1: 7, 2: 6, 3: 5, 4: 4, 5: 3}
+        self.grid_copy = None
 
     def getPosition(self):
         return self.pos
@@ -49,82 +50,63 @@ class PlayerAI(BaseAI):
         
         """
         time_for_move = time.time() + self.time_for_move
-        while time.time() < time_for_move:
-            curr_pos = grid.find(self.player_num)
-            grid_copy = grid.clone()
-            depth = 0
-            move = self.get_move_max(grid_copy, curr_pos, depth)
+        curr_pos = grid.find(self.player_num)
+        depth = 0
+        self.grid_copy = grid.clone()
+        move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move)
 
-            # # find all available moves
-            # available_moves = grid.get_neighbors(self.pos, only_available=True)
-            #
-            # # make random move
-            # new_pos = random.choice(available_moves) if available_moves else None
-
-        return move
+        return move[0]
 
 
-    def get_move_max(self, grid_copy, curr_pos, depth):
-        if depth >= self.max_depth:
+    def get_move_max(self, grid_copy, curr_pos, depth, time_for_move):
+        if depth >= self.max_depth or (time.time() > time_for_move):
             return (None, self.move_utility(grid_copy, curr_pos))
 
         max_util = (None, -np.inf)
+        depth += 1
 
         avail_moves = grid_copy.get_neighbors(curr_pos, only_available=True)
 
         # move_h_ocls(grid_copy, avail_moves), move_h_is(grid_copy, avail_moves), move_h_aisgrid_copy, avail_moves),
         # move_h_manhattan_dist_to_middle(avail_moves) as available heuristics
-        avail_moves.sort()
+        avail_moves.sort(key=self.move_h_ocls, reverse=True)
 
         for move in avail_moves:
-            depth += 1
-            grid_copy.move(move, self.player_num)
+            grid_copy = grid_copy.move(move, self.player_num)
             curr_pos = move
-            result = self.get_move_min(grid_copy, curr_pos, depth)
+            result = self.get_move_min(grid_copy, curr_pos, depth, time_for_move)
 
             if result[1] > max_util[1]:
-                max_util = result
+                max_util = (curr_pos, result[1])
 
 
         return max_util
 
-    def get_move_min(self, grid_copy, curr_pos, depth):
-        if depth >= self.max_depth:
+    def get_move_min(self, grid_copy, curr_pos, depth, time_for_move):
+        if depth >= self.max_depth or (time.time() > time_for_move):
             return (None, self.move_utility(grid_copy, curr_pos))
 
         min_util = (None, np.inf)
+        depth += 1
 
         for trap in grid_copy.get_neighbors(curr_pos, only_available=True):
-            depth += 1
-            trap_land = utils.throw_trap(player=self, grid=grid_copy, intended_position=trap)
-            grid_copy.trap(trap_land)
-            result = self.get_move_max(grid_copy, curr_pos, depth)
+            trap_land = utils.grid_copy_throw_trap(grid_copy.find(3 - self.player_num), grid_copy, trap)
+            grid_copy = grid_copy.trap(trap_land)
+            result = self.get_move_max(grid_copy, curr_pos, depth, time_for_move)
 
             if result[1] < min_util[1]:
-                min_util = result
+                min_util = (curr_pos, result[1])
 
         return min_util
 
-    def move_h_ocls(self, grid_copy, avail_moves):
-        utility_l = []
-        for move in avail_moves:
-            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True)))
+    def move_h_ocls(self, move):
+        return len(self.grid_copy.get_neighbors(move, only_available=True))
 
-        return utility_l
+    def move_h_is(self, move):
+        return len(self.grid_copy.get_neighbors(move, only_available=True) - len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True)))
 
-    def move_h_is(self, grid_copy, avail_moves):
-        utility_l = []
-        for move in avail_moves:
-            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True) - len(grid_copy.get_neighbors(grid_copy.find((3 - self.player_num)), only_available=True))))
-
-        return utility_l
-
-    def move_h_ais(self, grid_copy, avail_moves):
-        utility_l = []
-        for move in avail_moves:
-            utility_l.append(len(grid_copy.get_neighbors(move, only_available=True) - (2 * len(grid_copy.get_neighbors(grid_copy.find((3 - self.player_num)), only_available=True)))))
-
-        return utility_l
+    def move_h_ais(self, move):
+        return len(self.grid_copy.get_neighbors(move, only_available=True) - (2 * len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True))))
 
     def move_h_manhattan_dist_to_middle(self, avail_moves):
         utility_l = []
@@ -141,20 +123,22 @@ class PlayerAI(BaseAI):
         level = 0
         num_of_traps = 0
         utility = 0
+        avail_cells = grid_copy.getAvailableCells()
         # Iteratively identifies the neighboring cells of a player that have traps, level by level with a continued
         # expansion of the scope until we've reached limits of the board. Assigns each level some weight based on
         # proximity of traps to the player. Meanwhile, it checks if the player is trapped which would cause imminent
         # loss from the player
-        while len(utils.get_neighbors_by_level(curr_pos, level)) > len(utils.get_neighbors_by_level(curr_pos, level+1)):
+
+        # There can only be max 3 levels to explore
+        while level < 4:
             ns = utils.get_neighbors_by_level(curr_pos, level)
-            avail_cells = grid_copy.getAvailableCells()
 
             # Count number of traps at the current level
             for elem in ns:
                 if elem not in avail_cells:
                     num_of_traps += 1
 
-            utility -= -(self.lvl_weight[level] * num_of_traps)
+            utility += -(self.lvl_weight[level] * num_of_traps)
             trapped = utils.check_if_trapped(ns, num_of_traps)
 
             if trapped:
