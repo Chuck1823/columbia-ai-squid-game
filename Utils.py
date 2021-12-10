@@ -6,17 +6,17 @@ def manhattan_distance(position, target):
     return np.abs(target[0] - position[0]) + np.abs(target[1] - position[1])
 
 
-def throw_trap(player, grid: Grid, intended_position: tuple) -> tuple:
+def grid_copy_throw_trap(pos, grid_copy, intended_position):
     # find neighboring cells
-    neighbors = grid.get_neighbors(intended_position)
+    neighbors = grid_copy.get_neighbors(intended_position)
 
-    neighbors = [neighbor for neighbor in neighbors if grid.getCellValue(neighbor) <= 0]
+    neighbors = [neighbor for neighbor in neighbors if grid_copy.getCellValue(neighbor) <= 0]
     n = len(neighbors)
 
     probs = np.ones(1 + n)
 
     # compute probability of success, p
-    p = 1 - 0.05 * (manhattan_distance(player.getPosition(), intended_position) - 1)
+    p = 1 - 0.05 * (manhattan_distance(pos, intended_position) - 1)
 
     probs[0] = p
 
