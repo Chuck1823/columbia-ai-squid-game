@@ -54,6 +54,11 @@ class PlayerAI(BaseAI):
         depth = 0
         self.grid_copy = grid.clone()
         move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move)
+        if not move[0]:
+            # find all available moves
+            available_moves = grid.get_neighbors(self.pos, only_available=True)
+            # make random move
+            return random.choice(available_moves) if available_moves else None
 
         return move[0]
 
