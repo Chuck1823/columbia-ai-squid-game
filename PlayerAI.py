@@ -50,7 +50,12 @@ class PlayerAI(BaseAI):
         You may adjust the input variables as you wish (though it is not necessary). Output has to be (x,y) coordinates.
         
         """
-        pass
+        available_moves = grid.get_neighbors(self.pos, only_available = True)
+
+        # make random move
+        new_pos = random.choice(available_moves) if available_moves else None
+
+        return new_pos
 
     def getTrap(self, grid : Grid) -> tuple:
         """ 
@@ -71,7 +76,8 @@ class PlayerAI(BaseAI):
         depth = 0
         trap = self.get_trap_max(grid,oppo_pos,depth, time_limit)
         if not trap[0]:
-            return random.choice(grid.get_neighbors(oppo_pos))
+            print("random select")
+            return random.choice(grid.getAvailableCells())
         return trap[0]
 
 
@@ -83,28 +89,30 @@ class PlayerAI(BaseAI):
         if oppo_pos in poss_trap:
             poss_trap.remove(oppo_pos)
         miss_p = (1-p)/len(poss_trap)
-        if miss_p > 0.05:
+        if miss_p > 0.1:
             for neighbor in poss_trap:
                 grid_copy = grid.clone()
                 grid_copy.trap(neighbor)
-                result += miss_p* self.get_trap_min(grid, oppo_pos, depth, time_limit)
+                result += miss_p * self.get_trap_min(grid, oppo_pos, depth, time_limit)[1]
         grid_copy = grid.clone()
         grid_copy.trap(trap_pos)
-        result += p*self.get_trap_min(grid, oppo_pos, depth, time_limit)
-        return result
+        result += p * self.get_trap_min(grid, oppo_pos, depth, time_limit)[1]
+        return (trap_pos,result)
 
     def get_trap_max(self,grid, oppo_pos, depth, time_limit):
         if depth >= self.max_depth or time.time()>= time_limit:
             return (None, self.trap_utility(grid,oppo_pos))
         max_util = (None, -np.inf)
         avail_trap = grid.get_neighbors(oppo_pos, only_available = True)
+        if len(avail_trap) == 0:
+            return (None, np.inf)
         depth += 1
-
         for trap in avail_trap:
             result = self.get_trap_chance(grid, oppo_pos, trap, depth, time_limit)
             if result[1] > max_util[1]:
-                max_util = result
-
+                max_util = (trap,result[1])
+            if time.time()>= time_limit:
+                return max_util
         return max_util
         
 
@@ -116,19 +124,35 @@ class PlayerAI(BaseAI):
 
         for move in grid.get_neighbors(oppo_pos, only_available = True):
             grid.move(move, self.oppo_num)
-            result = self.get_trap_max(grid, oppo_pos, depth)
+            result = self.get_trap_max(grid, oppo_pos, depth, time_limit)
             
             if result[1] < min_util[1]:
                 min_util = (move, result[1])
-
+            if time.time() >= time_limit:
+                return min_util
         return min_util
 
     
-    def trap_utility(self,grid, oppo_pos):
+    def trap_utility_IS(self,grid, oppo_pos):
         #IS
         player_moves = grid.get_neighbors(self.pos,only_available = True)
         oppo_moves = grid.get_neighbors(oppo_pos,only_available = True)
         utility = len(player_moves)-len(oppo_moves)
+        #
         return utility
     
-    
+    def trap_utility(self,grid, oppo_pos):
+        #combine IS and Lookahead
+        #The available moves one step ahead is weighted based on current avaiable moves
+        player_moves = grid.get_neighbors(self.pos,only_available = True)
+        oppo_moves = grid.get_neighbors(oppo_pos,only_available = True)
+        num_move = 0
+        utility = len(player_moves)-len(oppo_moves)
+        for move in player_moves:
+            num_move += len(grid.get_neighbors(move,only_available = True))
+        utility += num_move/(len(player_moves)+1)
+        num_move = 0    
+        for move in oppo_moves:
+            num_move += len(grid.get_neighbors(move,only_available = True))
+        utility -= num_move/(len(oppo_moves)+1)
+        return utility
