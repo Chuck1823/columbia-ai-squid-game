@@ -55,8 +55,8 @@ class PlayerAI(BaseAI):
         time_for_move = time.time() + self.time_for_move
         curr_pos = grid.find(self.player_num)
         depth = 0
-        alpha = 0
-        beta = 0
+        alpha = -np.inf
+        beta = np.inf
         self.grid_copy = grid.clone()
         move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move, alpha, beta)
         if not move[0]:
@@ -189,14 +189,17 @@ class PlayerAI(BaseAI):
         time_limit = time.time() + self.time_for_trap
         oppo_pos = grid.find(self.oppo_num)
         depth = 0
-        trap = self.get_trap_max(grid,oppo_pos,depth, time_limit)
+        alpha = -np.inf
+        beta = np.inf
+        trap = self.get_trap_max(grid,oppo_pos,depth, time_limit, alpha, beta)
+        #If minmax returns None due to either time out or No ceils available
         if not trap[0]:
             print("random select")
             return random.choice(grid.getAvailableCells())
         return trap[0]
 
 
-    def get_trap_chance(self, grid, oppo_pos, trap_pos, depth, time_limit):
+    def get_trap_chance(self, grid, oppo_pos, trap_pos, depth, time_limit, alpha, beta):
         #probability
         p = 1 - 0.05*(manhattan_distance(trap_pos,self.pos)-1)
         result = 0
@@ -208,46 +211,58 @@ class PlayerAI(BaseAI):
             for neighbor in poss_trap:
                 grid_copy = grid.clone()
                 grid_copy.trap(neighbor)
-                result += miss_p * self.get_trap_min(grid, oppo_pos, depth, time_limit)[1]
+                result += miss_p * self.get_trap_min(grid_copy, oppo_pos, depth, time_limit, alpha, beta)[1]
         grid_copy = grid.clone()
         grid_copy.trap(trap_pos)
-        result += p * self.get_trap_min(grid, oppo_pos, depth, time_limit)[1]
+        result += p * self.get_trap_min(grid_copy, oppo_pos, depth, time_limit, alpha, beta)[1]
         return (trap_pos,result)
 
-    def get_trap_max(self,grid, oppo_pos, depth, time_limit):
+    def get_trap_max(self,grid, oppo_pos, depth, time_limit, alpha, beta):
         if depth >= self.max_depth or time.time()>= time_limit:
             return (None, self.trap_utility(grid,oppo_pos))
         max_util = (None, -np.inf)
-        avail_trap = grid.get_neighbors(oppo_pos, only_available = True)
+        avail_trap = self.get_avail_trap(grid,oppo_pos)
+        #avail_trap = grid.get_neighbors(oppo_pos, only_available = True)
         if len(avail_trap) == 0:
             return (None, np.inf)
         depth += 1
+        avail_trap.sort(key = self.get_trap_h, reverse = True)
         for trap in avail_trap:
-            result = self.get_trap_chance(grid, oppo_pos, trap, depth, time_limit)
+            result = self.get_trap_chance(grid, oppo_pos, trap, depth, time_limit, alpha, beta)
             if result[1] > max_util[1]:
                 max_util = (trap,result[1])
             if time.time()>= time_limit:
                 return max_util
+            if max_util[1] >= beta:
+                break
+            if max_util[1] > alpha:
+                alpha = max_util[1]
         return max_util
         
-
-    def get_trap_min(self,grid, oppo_pos, depth, time_limit):
+    def get_trap_min(self,grid, oppo_pos, depth, time_limit, alpha, beta):
         if depth >= self.max_depth or time.time() >= time_limit:
             return (None, self.trap_utility(grid,oppo_pos))
         min_util = (None, np.inf)
         depth += 1
-
-        for move in grid.get_neighbors(oppo_pos, only_available = True):
+        self.grid_copy = grid
+        avail_move = grid.get_neighbors(oppo_pos, only_available = True)
+        avail_move.sort(key = self.move_h_ocls,reverse = True)
+        for move in avail_move:
             grid.move(move, self.oppo_num)
-            result = self.get_trap_max(grid, oppo_pos, depth, time_limit)
+            result = self.get_trap_max(grid, oppo_pos, depth, time_limit, alpha, beta)
             
             if result[1] < min_util[1]:
                 min_util = (move, result[1])
             if time.time() >= time_limit:
                 return min_util
+            if min_util[1] <= alpha:
+                break
+            if min_util[1] < beta:
+                beta = min_util[1]
         return min_util
 
-    
+    def get_trap_h(self,trap):
+        return len(self.grid_copy.get_neighbors(trap,only_available=True))
     def trap_utility_IS(self,grid, oppo_pos):
         #IS
         player_moves = grid.get_neighbors(self.pos,only_available = True)
@@ -271,3 +286,27 @@ class PlayerAI(BaseAI):
             num_move += len(grid.get_neighbors(move,only_available = True))
         utility -= num_move/(len(oppo_moves)+1)
         return utility
+
+    def get_avail_trap(self,grid,pos):
+
+        """
+        Description
+        -----------
+        The function returns the neighboring cells of a certain cell in the board, given its x,y coordinates
+
+        Parameters
+        -----------
+        pos : position (x,y) whose neighbors are desired
+
+        only_available (bool) : if True, the function will return only available neighboring cells. 
+                                default = False
+        
+        """
+        x,y = pos
+        
+        valid_range = lambda t: range(max(t-2, 0), min(t+3, grid.dim))
+
+        # find all neighbors
+        neighbors = list({(a,b) for a in valid_range(x) for b in valid_range(y)} - {(x,y)})
+        return [neighbor for neighbor in neighbors if grid.map[neighbor] == 0]
+    
