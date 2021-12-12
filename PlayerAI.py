@@ -55,8 +55,10 @@ class PlayerAI(BaseAI):
         time_for_move = time.time() + self.time_for_move
         curr_pos = grid.find(self.player_num)
         depth = 0
+        alpha = 0
+        beta = 0
         self.grid_copy = grid.clone()
-        move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move)
+        move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move, alpha, beta)
         if not move[0]:
             # find all available moves
             available_moves = grid.get_neighbors(self.pos, only_available=True)
@@ -66,7 +68,7 @@ class PlayerAI(BaseAI):
         return move[0]
 
 
-    def get_move_max(self, grid_copy, curr_pos, depth, time_for_move):
+    def get_move_max(self, grid_copy, curr_pos, depth, time_for_move, alpha, beta):
         if depth >= self.max_depth or (time.time() > time_for_move):
             return (None, self.move_utility(grid_copy, curr_pos))
 
@@ -77,20 +79,26 @@ class PlayerAI(BaseAI):
 
         # move_h_ocls(grid_copy, avail_moves), move_h_is(grid_copy, avail_moves), move_h_aisgrid_copy, avail_moves),
         # move_h_manhattan_dist_to_middle(avail_moves) as available heuristics
-        avail_moves.sort(key=self.move_h_ocls, reverse=True)
+        avail_moves.sort(key=self.move_h_ais, reverse=True)
 
         for move in avail_moves:
             grid_copy = grid_copy.move(move, self.player_num)
             curr_pos = move
-            result = self.get_move_min(grid_copy, curr_pos, depth, time_for_move)
+            result = self.get_move_min(grid_copy, curr_pos, depth, time_for_move, alpha, beta)
 
             if result[1] > max_util[1]:
                 max_util = (curr_pos, result[1])
 
+            if max_util[1] >= beta:
+                break
+
+            if max_util[1] >= alpha:
+                alpha = max_util[1]
+
 
         return max_util
 
-    def get_move_min(self, grid_copy, curr_pos, depth, time_for_move):
+    def get_move_min(self, grid_copy, curr_pos, depth, time_for_move, alpha, beta):
         if depth >= self.max_depth or (time.time() > time_for_move):
             return (None, self.move_utility(grid_copy, curr_pos))
 
@@ -100,10 +108,16 @@ class PlayerAI(BaseAI):
         for trap in grid_copy.get_neighbors(curr_pos, only_available=True):
             trap_land = utils.grid_copy_throw_trap(grid_copy.find(3 - self.player_num), grid_copy, trap)
             grid_copy = grid_copy.trap(trap_land)
-            result = self.get_move_max(grid_copy, curr_pos, depth, time_for_move)
+            result = self.get_move_max(grid_copy, curr_pos, depth, time_for_move, alpha, beta)
 
             if result[1] < min_util[1]:
                 min_util = (curr_pos, result[1])
+
+            if min_util[1] <= alpha:
+                break
+
+            if min_util[1] < beta:
+                beta = min_util[1]
 
         return min_util
 
@@ -111,10 +125,10 @@ class PlayerAI(BaseAI):
         return len(self.grid_copy.get_neighbors(move, only_available=True))
 
     def move_h_is(self, move):
-        return len(self.grid_copy.get_neighbors(move, only_available=True) - len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True)))
+        return len(self.grid_copy.get_neighbors(move, only_available=True)) - len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True))
 
     def move_h_ais(self, move):
-        return len(self.grid_copy.get_neighbors(move, only_available=True) - (2 * len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True))))
+        return len(self.grid_copy.get_neighbors(move, only_available=True)) - (2 * len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True)))
 
     def move_h_manhattan_dist_to_middle(self, avail_moves):
         utility_l = []
