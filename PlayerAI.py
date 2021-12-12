@@ -24,6 +24,8 @@ class PlayerAI(BaseAI):
         self.lvl_weight = {0: 50, 1: 40, 2: 30, 3: 20, 4: 10, 5: 2}
         self.man_dist_conversion = {0: 8, 1: 7, 2: 6, 3: 5, 4: 4, 5: 3}
         self.grid_copy = None
+        self.alpha = -np.inf
+        self.beta = np.inf
 
     def getPosition(self):
         return self.pos
@@ -55,6 +57,8 @@ class PlayerAI(BaseAI):
         time_for_move = time.time() + self.time_for_move
         curr_pos = grid.find(self.player_num)
         depth = 0
+        self.alpha = -np.inf
+        self.beta = np.inf
         self.grid_copy = grid.clone()
         move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move)
         if not move[0]:
@@ -87,7 +91,12 @@ class PlayerAI(BaseAI):
             if result[1] > max_util[1]:
                 max_util = (curr_pos, result[1])
 
-
+            if max_util[1] >= self.beta:
+                break
+            
+            if max_util[1] > self.alpha:
+                self.alpha = max_util[1]
+            
         return max_util
 
     def get_move_min(self, grid_copy, curr_pos, depth, time_for_move):
@@ -105,6 +114,11 @@ class PlayerAI(BaseAI):
             if result[1] < min_util[1]:
                 min_util = (curr_pos, result[1])
 
+            if min_util[1] <= self.alpha:
+                break
+            
+            if min_util[1] < self.beta:
+                self.beta = min_util
         return min_util
 
     def move_h_ocls(self, move):
@@ -175,6 +189,8 @@ class PlayerAI(BaseAI):
         time_limit = time.time() + self.time_for_trap
         oppo_pos = grid.find(self.oppo_num)
         depth = 0
+        self.alpha = -np.inf
+        self.beta = np.inf
         trap = self.get_trap_max(grid,oppo_pos,depth, time_limit)
         if not trap[0]:
             print("random select")
@@ -205,6 +221,7 @@ class PlayerAI(BaseAI):
             return (None, self.trap_utility(grid,oppo_pos))
         max_util = (None, -np.inf)
         avail_trap = grid.get_neighbors(oppo_pos, only_available = True)
+        #account for edge case when player 1 blocked opponent's move
         if len(avail_trap) == 0:
             return (None, np.inf)
         depth += 1
@@ -214,6 +231,10 @@ class PlayerAI(BaseAI):
                 max_util = (trap,result[1])
             if time.time()>= time_limit:
                 return max_util
+            if max_util[1] >= self.beta:
+                break
+            if max_util[1] > self.alpha:
+                self.alpha = max_util[1]
         return max_util
         
 
@@ -231,6 +252,10 @@ class PlayerAI(BaseAI):
                 min_util = (move, result[1])
             if time.time() >= time_limit:
                 return min_util
+            if min_util[1] <= self.alpha:
+                break
+            if min_util[1] < self.beta:
+                beta = min_util[1]
         return min_util
 
     
