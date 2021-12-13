@@ -1,0 +1,4 @@
+Group member1: Zhepeng(Alan) Luo UNI:zl3092
+Contribution: Trap Expectiminmax, hueristics and utility
+Group member: Charles Antoine Malenfant UNI: cam2420
+Contribution: Move Expectiminmax, utility and hueristics
