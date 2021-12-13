@@ -22,7 +22,6 @@ class PlayerAI(BaseAI):
         self.time_for_trap = 2.5
         self.max_depth = 5
         self.lvl_weight = {0: 50, 1: 40, 2: 30, 3: 20, 4: 10, 5: 2}
-        self.man_dist_conversion = {0: 8, 1: 7, 2: 6, 3: 5, 4: 4, 5: 3}
         self.grid_copy = None
 
     def getPosition(self):
@@ -60,10 +59,12 @@ class PlayerAI(BaseAI):
         self.grid_copy = grid.clone()
         move = self.get_move_max(self.grid_copy, curr_pos, depth, time_for_move, alpha, beta)
         if not move[0]:
-            # find all available moves
             available_moves = grid.get_neighbors(self.pos, only_available=True)
-            # make random move
-            return random.choice(available_moves) if available_moves else None
+            if available_moves:
+                available_moves.sort(key=self.move_h_ocls, reverse=True)
+                return available_moves[0]
+            else:
+                return None
 
         return move[0]
 
@@ -77,8 +78,8 @@ class PlayerAI(BaseAI):
 
         avail_moves = grid_copy.get_neighbors(curr_pos, only_available=True)
 
-        # move_h_ocls(grid_copy, avail_moves), move_h_is(grid_copy, avail_moves), move_h_aisgrid_copy, avail_moves),
-        # move_h_manhattan_dist_to_middle(avail_moves) as available heuristics
+        # move_h_ocls(grid_copy, avail_moves), move_h_is(grid_copy, avail_moves), move_h_ais(grid_copy, avail_moves),
+        # as available heuristics
         avail_moves.sort(key=self.move_h_ais, reverse=True)
 
         for move in avail_moves:
@@ -130,17 +131,6 @@ class PlayerAI(BaseAI):
     def move_h_ais(self, move):
         return len(self.grid_copy.get_neighbors(move, only_available=True)) - (2 * len(self.grid_copy.get_neighbors(self.grid_copy.find((3 - self.player_num)), only_available=True)))
 
-    def move_h_manhattan_dist_to_middle(self, avail_moves):
-        utility_l = []
-        for move in avail_moves:
-            manhattan_dist = np.abs(move[0], -3) + np.abs(move[1], -3)
-            if manhattan_dist > 5:
-                utility_l.append(3)
-            else:
-                utility_l.append(self.man_dist_conversion[manhattan_dist])
-
-        return utility_l
-
     def move_utility(self, grid_copy, curr_pos):
         level = 0
         num_of_traps = 0
@@ -161,7 +151,7 @@ class PlayerAI(BaseAI):
                     num_of_traps += 1
 
             utility += -(self.lvl_weight[level] * num_of_traps)
-            trapped = utils.check_if_trapped(ns, num_of_traps)
+            trapped = utils.check_if_trapped(ns, avail_cells)
 
             if trapped:
                 return -np.inf
@@ -246,7 +236,7 @@ class PlayerAI(BaseAI):
         depth += 1
         self.grid_copy = grid
         avail_move = grid.get_neighbors(oppo_pos, only_available = True)
-        avail_move.sort(key = self.move_h_ocls,reverse = True)
+        avail_move.sort(key=self.move_h_ocls, reverse=True)
         for move in avail_move:
             grid.move(move, self.oppo_num)
             result = self.get_trap_max(grid, oppo_pos, depth, time_limit, alpha, beta)

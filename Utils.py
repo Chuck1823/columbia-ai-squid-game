@@ -51,8 +51,8 @@ def get_neighbors_by_level(pos, level):
     return neighbors
 
 
-def check_if_trapped(lvl_ns, num_traps):
-    if len(lvl_ns) == num_traps:
-        return True
-    else:
+def check_if_trapped(lvl_ns, avail_cells):
+    if any(item in avail_cells for item in lvl_ns):
         return False
+    else:
+        return True
